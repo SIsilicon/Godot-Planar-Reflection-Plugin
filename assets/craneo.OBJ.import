@@ -1,0 +1,19 @@
+[remap]
+
+importer="wavefront_obj"
+type="Mesh"
+path="res://.import/craneo.OBJ-239a468865ad19f8aff422e003b1c13c.mesh"
+
+[deps]
+
+files=[ "res://.import/craneo.OBJ-239a468865ad19f8aff422e003b1c13c.mesh" ]
+
+source_file="res://assets/craneo.OBJ"
+dest_files=[ "res://.import/craneo.OBJ-239a468865ad19f8aff422e003b1c13c.mesh", "res://.import/craneo.OBJ-239a468865ad19f8aff422e003b1c13c.mesh" ]
+
+[params]
+
+generate_tangents=true
+scale_mesh=Vector3( 1, 1, 1 )
+offset_mesh=Vector3( 0, 0, 0 )
+optimize_mesh=true
