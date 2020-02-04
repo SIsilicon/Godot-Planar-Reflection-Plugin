@@ -2,17 +2,17 @@ tool
 extends EditorPlugin
 
 var editor_camera : Camera
-var viewport_size : Vector2
 
 func _enter_tree() -> void:
 	name = "PlanarReflectionPlugin"
+	add_custom_type("PlanarReflector", "MeshInstance", preload("planar_reflector.gd"), preload("planar_reflector_icon.svg"))
+	
 	print("planar reflection plugin enter tree")
-
-func _ready() -> void:
-	viewport_size = get_viewport().size
 
 func _exit_tree():
-	print("planar reflection plugin enter tree")
+	remove_custom_type("PlanarReflector")
+	
+	print("planar reflection plugin exit tree")
 
 func forward_spatial_gui_input(p_camera : Camera, p_event : InputEvent) -> bool:
 	if not editor_camera:
