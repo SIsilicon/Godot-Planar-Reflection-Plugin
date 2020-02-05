@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=2]
+[gd_scene load_steps=24 format=2]
 
 [ext_resource path="res://assets/textures/difuso_flip_oscuro_5.jpg" type="Texture" id=1]
 [ext_resource path="res://icon.png" type="Texture" id=2]
@@ -7,15 +7,15 @@
 [ext_resource path="res://assets/textures/normal_flip_3.jpg" type="Texture" id=6]
 [ext_resource path="res://addons/Silicon.vfx.planar_reflection/planar_reflector.gd" type="Script" id=7]
 
-[sub_resource type="CylinderMesh" id=1]
+[sub_resource type="CylinderMesh" id=5]
 bottom_radius = 0.001
 
-[sub_resource type="SpatialMaterial" id=2]
+[sub_resource type="SpatialMaterial" id=6]
 albedo_color = Color( 1, 0, 0, 1 )
 metallic = 0.3
 roughness = 0.36
 
-[sub_resource type="Animation" id=3]
+[sub_resource type="Animation" id=7]
 length = 6.0
 loop = true
 tracks/0/type = "value"
@@ -31,16 +31,178 @@ tracks/0/keys = {
 "values": [ Vector3( 0, -50, 0 ), Vector3( 0, 50, 0 ), Vector3( 0, -50, 0 ) ]
 }
 
-[sub_resource type="PlaneMesh" id=4]
+[sub_resource type="QuadMesh" id=8]
+size = Vector2( 4, 3 )
+
+[sub_resource type="Shader" id=4]
+code = "shader_type spatial;
+render_mode depth_draw_never, depth_test_disable;
+
+uniform float roughness : hint_range(0.0, 1.0) = 0.0;
+uniform bool transparent;
+
+uniform sampler2D viewport;
+uniform vec4 rect = vec4(-2.0, -2.0, 4.0, 4.0);
+
+// FRESNEL FUNCTION
+float fresnel(float n1, float n2, float cos_theta) {
+	float R0 = pow((n1 - n2) / (n1+n2), 2);
+	float fres = R0 + (1.0 - R0)*pow(1.0 - abs(cos_theta), 5);
+	
+	float critical_angle = asin(n1 / n2);
+	if(acos(abs(cos_theta)) > critical_angle && sign(cos_theta) == 1.0) return 1.0;
+	
+	return fres;
+}
+
+vec4 cubic(float v) {
+	vec4 n = vec4(1.0, 2.0, 3.0, 4.0) - v;
+	vec4 s = n * n * n;
+	float x = s.x;
+	float y = s.y - 4.0 * s.x;
+	float z = s.z - 4.0 * s.y + 6.0 * s.x;
+	float w = 6.0 - x - y - z;
+	return vec4(x, y, z, w) * (1.0/6.0);
+}
+
+vec4 texture_bicubic(sampler2D sampler, vec2 tex_coords) {
+	vec2 tex_size = vec2(textureSize(sampler, 0));
+	vec2 inv_tex_size = 1.0 / tex_size;
+	
+	tex_coords = tex_coords * tex_size - 0.5;
+	
+	vec2 fxy = fract(tex_coords);
+	tex_coords -= fxy;
+	
+	vec4 xcubic = cubic(fxy.x);
+	vec4 ycubic = cubic(fxy.y);
+	
+	vec4 c = tex_coords.xxyy + vec2 (-0.5, +1.5).xyxy;
+	
+	vec4 s = vec4(xcubic.xz + xcubic.yw, ycubic.xz + ycubic.yw);
+	vec4 offset = c + vec4 (xcubic.yw, ycubic.yw) / s;
+	
+	offset *= inv_tex_size.xxyy;
+	
+	vec4 sample0 = texture(sampler, offset.xz);
+	vec4 sample1 = texture(sampler, offset.yz);
+	vec4 sample2 = texture(sampler, offset.xw);
+	vec4 sample3 = texture(sampler, offset.yw);
+	
+	float sx = s.x / (s.x + s.y);
+	float sy = s.z / (s.z + s.w);
+	
+	return mix(mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
+}
+
+void fragment() {
+	float depth = textureLod(DEPTH_TEXTURE, SCREEN_UV, 0.0).r;
+	vec4 upos = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+	upos /= upos.w;
+	upos = inverse(WORLD_MATRIX) * CAMERA_MATRIX * upos;
+	vec4 model_pos = inverse(WORLD_MATRIX) * CAMERA_MATRIX * vec4(VERTEX, 1.0);
+	
+	if(abs(upos.z - model_pos.z) > 0.01 * -VERTEX.z) {
+		discard;
+	}
+	
+	//PR__FRAGMENT_CODE_GOES_HERE__PR//
+	ROUGHNESS = roughness;
+	
+	//calculate reflectiveness based on fresnel and camera angle
+	float reflectiveness = fresnel(1.5, 1.0, dot(normalize(VERTEX), NORMAL));
+	
+	vec2 uv = (vec2(upos.x, -upos.y) - rect.xy) / rect.zw;
+	vec4 reflection = texture_bicubic(viewport, uv);
+	if(any(isnan(reflection))) {
+		reflection = vec4(1.0);
+	}
+	reflection.a *= 1.0 - ROUGHNESS;
+	
+	METALLIC = 1.0;
+	EMISSION = reflection.rgb * (1.0 - ROUGHNESS);
+	ALBEDO = vec3(1.0 - reflection.a);
+	ROUGHNESS = mix(1.0 - ALBEDO.r, 1.0, ROUGHNESS);
+	
+	if(transparent) {
+		ALPHA = reflection.a * reflectiveness;
+	}
+}
+
+float D_GGX(in float rough, in float NdH) {
+    float m = rough * rough;
+    float m2 = m * m;
+    float d = (NdH * m2 - NdH) * NdH + 1.0;
+    return m2 / (3.14159 * d * d);
+}
+
+float G_schlick(in float rough, in float NdV, in float NdL) {
+    float k = rough * rough * 0.5;
+    float V = NdV * (1.0 - k) + k;
+    float L = NdL * (1.0 - k) + k;
+    return 0.25 / (V * L);
+}
+
+vec3 cooktorrance_specular(in float NdL, in float NdV, in float NdH, in vec3 specular, in float rough) {
+    float D = D_GGX(rough, NdH);
+    float G = G_schlick(rough, NdV, NdL);
+
+    return specular * G * D;
+}
+
+void light() {
+	vec3 H = normalize(LIGHT + VIEW);
+	float HdV = dot(H, VIEW);
+	float NdL = dot(NORMAL, LIGHT);
+	float NdV = dot(NORMAL, VIEW);
+	float NdH = dot(NORMAL, H);
+
+	float spec_fresnel = fresnel(1.5, 1.0, HdV);
+	SPECULAR_LIGHT += cooktorrance_specular(NdL, NdV, NdH, vec3(spec_fresnel), roughness) * ATTENUATION * LIGHT_COLOR;
+}
+"
+
+[sub_resource type="ViewportTexture" id=9]
+flags = 4
+
+[sub_resource type="ShaderMaterial" id=10]
+resource_local_to_scene = true
+render_priority = -2
+shader = SubResource( 4 )
+shader_param/roughness = 0.01
+shader_param/transparent = false
+shader_param/rect = Plane( -1.8, -1.3, 3.6, 2.6 )
+shader_param/viewport = SubResource( 9 )
+
+[sub_resource type="PlaneMesh" id=11]
 size = Vector2( 30, 30 )
 
-[sub_resource type="SpatialMaterial" id=5]
+[sub_resource type="SpatialMaterial" id=12]
+albedo_texture = ExtResource( 2 )
+roughness = 0.1
+uv1_scale = Vector3( 20, 20, 1 )
+
+[sub_resource type="ViewportTexture" id=13]
+flags = 4
+
+[sub_resource type="ShaderMaterial" id=14]
+resource_local_to_scene = true
+render_priority = -2
+shader = SubResource( 4 )
+shader_param/roughness = 0.1
+shader_param/transparent = true
+shader_param/rect = Plane( -15, -15, 30, 30 )
+shader_param/viewport = SubResource( 13 )
+
+[sub_resource type="SpatialMaterial" id=15]
 params_cull_mode = 2
 albedo_texture = ExtResource( 2 )
 roughness = 0.0
+normal_enabled = true
+normal_scale = 1.0
 uv1_scale = Vector3( 20, 20, 1 )
 
-[sub_resource type="SpatialMaterial" id=6]
+[sub_resource type="SpatialMaterial" id=16]
 albedo_texture = ExtResource( 1 )
 metallic_specular = 1.0
 roughness = 0.62
@@ -48,19 +210,19 @@ normal_enabled = true
 normal_scale = 1.2
 normal_texture = ExtResource( 6 )
 
-[sub_resource type="SphereMesh" id=7]
+[sub_resource type="SphereMesh" id=17]
 radius = 0.4
 height = 0.8
 
-[sub_resource type="SpatialMaterial" id=8]
+[sub_resource type="SpatialMaterial" id=18]
 flags_transparent = true
 albedo_color = Color( 0.00392157, 0.878431, 0.713726, 1 )
 roughness = 0.22
 
-[sub_resource type="CubeMesh" id=9]
+[sub_resource type="CubeMesh" id=19]
 size = Vector3( 0.6, 0.6, 0.6 )
 
-[sub_resource type="SpatialMaterial" id=10]
+[sub_resource type="SpatialMaterial" id=20]
 albedo_color = Color( 0.12549, 1, 0, 1 )
 albedo_texture = ExtResource( 2 )
 uv1_scale = Vector3( 6, 4, 2 )
@@ -76,24 +238,31 @@ use_gui = false
 
 [node name="CameraIndicator" type="MeshInstance" parent="Camera"]
 transform = Transform( 0.1, 5.58794e-09, 4.65661e-10, 1.86265e-09, -3.72529e-09, 0.1, 9.31323e-10, -0.1, -2.6077e-08, -1.19209e-07, 1.19209e-06, 0.125084 )
-mesh = SubResource( 1 )
-material/0 = SubResource( 2 )
+mesh = SubResource( 5 )
+material/0 = SubResource( 6 )
 
 [node name="Rotator" type="Spatial" parent="."]
 transform = Transform( 0.915077, 0, 0.403279, 0, 1, 0, -0.403279, 0, 0.915077, 0, 0, 0 )
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="Rotator"]
 autoplay = "rotate"
-anims/rotate = SubResource( 3 )
+anims/rotate = SubResource( 7 )
 
-[node name="PlanarReflector" type="MeshInstance" parent="Rotator"]
-transform = Transform( 0.915077, 0, -0.403279, 0, 1, 0, 0.403279, 0, 0.915077, 1.76973, 2.62901, -4.01569 )
+[node name="Mirror" type="MeshInstance" parent="Rotator"]
+transform = Transform( 0.915077, -0.0687806, -0.39737, 0, 0.985348, -0.170553, 0.403279, 0.15607, 0.90167, 2.45299, 4.11632, -5.56607 )
+mesh = SubResource( 8 )
+material/0 = null
+
+[node name="PlanarReflector" type="MeshInstance" parent="Rotator/Mirror"]
+transform = Transform( 1, -7.45056e-09, 2.84217e-14, 0, 1, -1.49012e-08, 0, -1.49012e-08, 1, 0, 0, 0 )
+material_override = SubResource( 10 )
 script = ExtResource( 7 )
-extents = Vector2( 10, 5 )
-resolution = 512
-clip_distance = 0.0
+extents = Vector2( 3.6, 2.6 )
+resolution = 256
+fit_mode = 1
+roughness = 0.01
 transparent = false
-cull_mask = 1048573
+cull_mask = 1048575
 
 [node name="Scene" type="Spatial" parent="."]
 __meta__ = {
@@ -102,24 +271,40 @@ __meta__ = {
 }
 
 [node name="Floor" type="MeshInstance" parent="Scene"]
-mesh = SubResource( 4 )
-material/0 = SubResource( 5 )
+layers = 2
+mesh = SubResource( 11 )
+material/0 = SubResource( 12 )
+
+[node name="PlanarReflector" type="MeshInstance" parent="Scene/Floor"]
+transform = Transform( 1, -1.49012e-08, -6.5135e-16, 0, -4.37114e-08, 1, -1.49012e-08, -1, -4.37114e-08, 0, 0, 0 )
+material_override = SubResource( 14 )
+script = ExtResource( 7 )
+extents = Vector2( 30, 30 )
+resolution = 1024
+fit_mode = 0
+roughness = 0.1
+transparent = true
+cull_mask = 1048573
+
+[node name="Wall" type="MeshInstance" parent="Scene"]
+transform = Transform( 1, 0, 0, 0, -1.62921e-07, -1, 0, 1, -1.62921e-07, 0, 0, -10 )
+mesh = SubResource( 11 )
+material/0 = SubResource( 15 )
 
 [node name="Skull" type="MeshInstance" parent="Scene"]
-transform = Transform( -1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, 0, 2, 0 )
+transform = Transform( -1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, 0, 2.23164, 0 )
 mesh = ExtResource( 4 )
-material/0 = SubResource( 6 )
+material/0 = SubResource( 16 )
 
 [node name="Sphere" type="MeshInstance" parent="Scene"]
-transform = Transform( -1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, 1.5, 3.69516, -1.1566 )
-mesh = SubResource( 7 )
-material/0 = SubResource( 8 )
+transform = Transform( -1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, 1.5, 2.07203, -3.56913 )
+mesh = SubResource( 17 )
+material/0 = SubResource( 18 )
 
 [node name="Cube" type="MeshInstance" parent="Scene"]
 transform = Transform( -1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, -1.5, 1.5, 0 )
-layers = 2
-mesh = SubResource( 9 )
-material/0 = SubResource( 10 )
+mesh = SubResource( 19 )
+material/0 = SubResource( 20 )
 
 [node name="OmniLight" type="OmniLight" parent="Scene"]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2.04976, 3.428, 0 )
