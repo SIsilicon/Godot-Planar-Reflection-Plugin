@@ -7,7 +7,6 @@ enum FitMode {
 }
 
 # Exported variables
-var extents := Vector2(2, 2) setget set_extents
 var resolution := 256 setget set_resolution
 var fit_mode : int = FitMode.FIT_AREA setget set_fit_mode
 var roughness := 0.01 setget set_roughness
@@ -19,6 +18,7 @@ var plugin : EditorPlugin
 
 var reflect_mesh : MeshInstance
 var reflect_viewport : Viewport
+var reflect_texture : ViewportTexture
 var reflect_material : Material
 
 var main_cam : Camera
@@ -26,8 +26,6 @@ var reflect_camera : Camera
 
 func _set(property : String, value) -> bool:
 	match property:
-		"extents":
-			set_extents(value)
 		"resolution":
 			set_resolution(value)
 		"fit_mode":
@@ -38,14 +36,23 @@ func _set(property : String, value) -> bool:
 			set_transparent(value)
 		"cull_mask":
 			set_cull_mask(value)
+		"mesh":
+			mesh = value
+			reflect_mesh.mesh = mesh
+		"material_override":
+			if material_override and material_override != value:
+				ReflectMaterialManager.remove_material(material_override, self)
+			
+			material_override = value
+			VisualServer.instance_geometry_set_material_override(get_instance(), preload("discard.material").get_rid())
+			reflect_mesh.material_override = ReflectMaterialManager.add_material(value, self)
+			reflect_mesh.material_override.set_shader_param("viewport", reflect_texture)
 		_:
 			return false
 	return true
 
 func _get(property : String):
 	match property:
-		"extents":
-			return extents
 		"resolution":
 			return resolution
 		"fit_mode":
@@ -60,7 +67,6 @@ func _get(property : String):
 func _get_property_list() -> Array:
 	var props := []
 	
-	props += [{"name": "extents", "type": TYPE_VECTOR2}]
 	props += [{"name": "resolution", "type": TYPE_INT}]
 	props += [{"name": "fit_mode", "type": TYPE_INT, "hint": PROPERTY_HINT_ENUM, "hint_string": "Fit Area, Fit View"}]
 	props += [{"name": "roughness", "type": TYPE_REAL, "hint": PROPERTY_HINT_RANGE, "hint_string": "0, 1"}]
@@ -70,23 +76,30 @@ func _get_property_list() -> Array:
 	return props
 
 func _ready() -> void:
+	for i in get_children():
+		remove_child(i)
+	
 	if Engine.editor_hint:
 		plugin = get_node("/root/EditorNode/PlanarReflectionPlugin")
 	
 	# Create mirror surface
 	reflect_mesh = MeshInstance.new()
-	reflect_mesh.mesh = QuadMesh.new()
-	reflect_mesh.mesh.size = extents
+	reflect_mesh.mesh = mesh
 	add_child(reflect_mesh)
 	
+	if not mesh:
+		self.mesh = QuadMesh.new()
+	
 	#create mirror material
-	reflect_material = preload("reflection.material").duplicate()
+	reflect_material = ShaderMaterial.new()
+	reflect_material.shader = preload("base_reflection.shader")
 	reflect_material.resource_local_to_scene = true
 	reflect_material.render_priority = -2
-	reflect_mesh.set_surface_material(0, reflect_material)
+	reflect_mesh.material_override = reflect_material
 	
 	# add viewport
 	reflect_viewport = Viewport.new()
+	reflect_viewport.transparent_bg = true
 	reflect_viewport.keep_3d_linear = true
 	reflect_viewport.hdr = true
 	reflect_viewport.msaa = Viewport.MSAA_4X
@@ -97,31 +110,36 @@ func _ready() -> void:
 	yield(get_tree(), 'idle_frame')
 	yield(get_tree(), 'idle_frame')
 	
-	var reflect_tex = reflect_viewport.get_texture()
-	reflect_tex.set_flags(Texture.FLAG_FILTER)
-	reflect_material.set_shader_param("viewport", reflect_tex)
+	reflect_texture = reflect_viewport.get_texture()
+	reflect_texture.set_flags(Texture.FLAG_FILTER)
+	reflect_material.set_shader_param("viewport", reflect_texture)
 	
 	if not Engine.is_editor_hint():
-		reflect_tex.viewport_path = "/root/" + get_node("/root").get_path_to(reflect_viewport)
+		reflect_texture.viewport_path = "/root/" + get_node("/root").get_path_to(reflect_viewport)
 	
 	initialize_camera()
 	
-	set_extents(extents)
 	set_resolution(resolution)
 	set_transparent(transparent)
 	set_roughness(roughness)
 	set_cull_mask(cull_mask)
 	
-	material_override = reflect_material
+	self.set("material_override", material_override)
+	
+	for i in get_children():
+		i.owner = get_tree().edited_scene_root
 
 func _process(delta : float) -> void:
-	if not reflect_camera or not reflect_viewport:
+	if not reflect_camera or not reflect_viewport or not get_extents().length():
 		return
+	resize_viewport()
 	
 	# Get main camera and viewport
 	var main_viewport : Viewport
 	if Engine.editor_hint:
 		main_cam = plugin.editor_camera
+		if not main_cam:
+			return
 		main_viewport = main_cam.get_parent()
 	else:
 		main_viewport = get_viewport()
@@ -153,18 +171,18 @@ func _process(delta : float) -> void:
 				rect = Rect2(intersection, Vector2())
 			else:
 				rect = rect.expand(intersection)
-		rect = Rect2(-extents / 2.0, extents).clip(rect)
+		rect = Rect2(-get_extents() / 2.0, get_extents()).clip(rect)
 		
 		# Aspect ratio of our extents must also be enforced.
 		var aspect = rect.size.aspect()
-		if aspect > extents.aspect():
-			rect = scale_rect2(rect, Vector2(1.0, aspect / extents.aspect()))
+		if aspect > get_extents().aspect():
+			rect = scale_rect2(rect, Vector2(1.0, aspect / get_extents().aspect()))
 		else:
-			rect = scale_rect2(rect, Vector2(extents.aspect() / aspect, 1.0))
+			rect = scale_rect2(rect, Vector2(get_extents().aspect() / aspect, 1.0))
 	else:
 		# Area of the whole plane
-		rect = Rect2(-extents / 2.0, extents)
-	reflect_material.set_shader_param("rect", Plane(rect.position.x, rect.position.y, rect.size.x, rect.size.y))
+		rect = Rect2(-get_extents() / 2.0, get_extents())
+	reflect_mesh.material_override.set_shader_param("viewport_rect", Plane(rect.position.x, rect.position.y, rect.size.x, rect.size.y))
 	
 	var rect_center := rect.position + rect.size / 2.0
 	reflection_transform.origin += reflection_transform.basis.x * rect_center.x
@@ -199,7 +217,7 @@ func _process(delta : float) -> void:
 	reflect_camera.set_frustum(rect.size.y, -offset, z_near, main_cam.far)
 
 func resize_viewport() -> void:
-	var new_size : Vector2 = Vector2(extents.aspect(), 1.0) * resolution
+	var new_size : Vector2 = Vector2(get_extents().aspect(), 1.0) * resolution
 	if new_size.x > new_size.y:
 		new_size = new_size / new_size.x * resolution
 	
@@ -222,16 +240,14 @@ func initialize_camera() -> void:
 	reflect_camera.keep_aspect = Camera.KEEP_HEIGHT
 	reflect_camera.current = true
 
-func set_extents(value : Vector2) -> void:
-	extents = value
-	if reflect_mesh:
-		reflect_mesh.mesh.size = extents
-		resize_viewport()
+func get_extents() -> Vector2:
+	if mesh:
+		return Vector2(mesh.get_aabb().size.x, mesh.get_aabb().size.y)
+	else:
+		return Vector2()
 
 func set_resolution(value : int) -> void:
 	resolution = max(value, 1)
-	if reflect_viewport:
-		resize_viewport()
 
 func set_fit_mode(value : int) -> void:
 	fit_mode = value

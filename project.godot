@@ -19,6 +19,10 @@ config/name="Planar Reflection Plugin"
 run/main_scene="res://main.tscn"
 config/icon="res://icon.png"
 
+[autoload]
+
+ReflectMaterialManager="*res://addons/Silicon.vfx.planar_reflection/reflect_material_manager.gd"
+
 [editor_plugins]
 
 enabled=PoolStringArray( "Silicon.vfx.planar_reflection" )
