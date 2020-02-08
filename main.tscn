@@ -1,4 +1,4 @@
-[gd_scene load_steps=22 format=2]
+[gd_scene load_steps=25 format=2]
 
 [ext_resource path="res://assets/textures/difuso_flip_oscuro_5.jpg" type="Texture" id=1]
 [ext_resource path="res://icon.png" type="Texture" id=2]
@@ -35,11 +35,6 @@ tracks/0/keys = {
 size = Vector2( 30, 30 )
 
 [sub_resource type="SpatialMaterial" id=5]
-albedo_texture = ExtResource( 2 )
-roughness = 0.1
-uv1_scale = Vector3( 20, 20, 1 )
-
-[sub_resource type="SpatialMaterial" id=6]
 params_cull_mode = 2
 albedo_texture = ExtResource( 2 )
 roughness = 0.0
@@ -47,7 +42,7 @@ normal_enabled = true
 normal_scale = 1.0
 uv1_scale = Vector3( 20, 20, 1 )
 
-[sub_resource type="SpatialMaterial" id=7]
+[sub_resource type="SpatialMaterial" id=6]
 albedo_texture = ExtResource( 1 )
 metallic_specular = 1.0
 roughness = 0.62
@@ -55,142 +50,66 @@ normal_enabled = true
 normal_scale = 1.2
 normal_texture = ExtResource( 6 )
 
-[sub_resource type="SphereMesh" id=8]
-radius = 0.4
-height = 0.8
+[sub_resource type="SphereMesh" id=7]
+radius = 5.0
+height = 10.0
 
-[sub_resource type="SpatialMaterial" id=9]
-flags_transparent = true
+[sub_resource type="SpatialMaterial" id=8]
 albedo_color = Color( 0.00392157, 0.878431, 0.713726, 1 )
 roughness = 0.22
 
-[sub_resource type="CubeMesh" id=10]
-size = Vector3( 0.6, 0.6, 0.6 )
+[sub_resource type="CubeMesh" id=9]
+size = Vector3( 3, 3, 3 )
 
-[sub_resource type="SpatialMaterial" id=11]
+[sub_resource type="SpatialMaterial" id=10]
 albedo_color = Color( 0.12549, 1, 0, 1 )
 albedo_texture = ExtResource( 2 )
 uv1_scale = Vector3( 6, 4, 2 )
 
-[sub_resource type="QuadMesh" id=12]
-size = Vector2( 3, 4 )
+[sub_resource type="SpatialMaterial" id=11]
+emission_enabled = true
+emission = Color( 1, 1, 1, 1 )
+emission_energy = 9.26
+emission_operator = 0
+emission_on_uv2 = false
 
-[sub_resource type="Shader" id=13]
-code = "shader_type spatial;
-//PR__UNIFORMS_AND_FUNCTIONS__PR//
-uniform sampler2D viewport;
-uniform vec4 viewport_rect = vec4(-2.0, -2.0, 4.0, 4.0);
+[sub_resource type="SphereMesh" id=12]
+radius = 0.2
+height = 0.4
+radial_segments = 16
+rings = 8
 
-vec3 fresnel(vec3 f0, float cos_theta) {
-	vec3 fres = f0 + (vec3(1.0) - f0)*pow(1.0 - abs(cos_theta), 5.0);
-	return fres;
-}
+[sub_resource type="QuadMesh" id=13]
+size = Vector2( 30, 30 )
 
-vec4 cubic(float v) {
-	vec4 n = vec4(1.0, 2.0, 3.0, 4.0) - v;
-	vec4 s = n * n * n;
-	float x = s.x;
-	float y = s.y - 4.0 * s.x;
-	float z = s.z - 4.0 * s.y + 6.0 * s.x;
-	float w = 6.0 - x - y - z;
-	return vec4(x, y, z, w) * (1.0/6.0);
-}
+[sub_resource type="OpenSimplexNoise" id=14]
 
-vec4 texture_bicubic(sampler2D sampler, vec2 tex_coords) {
-	vec2 tex_size = vec2(textureSize(sampler, 0));
-	vec2 inv_tex_size = 1.0 / tex_size;
-	
-	tex_coords = tex_coords * tex_size - 0.5;
-	
-	vec2 fxy = fract(tex_coords);
-	tex_coords -= fxy;
-	
-	vec4 xcubic = cubic(fxy.x);
-	vec4 ycubic = cubic(fxy.y);
-	
-	vec4 c = tex_coords.xxyy + vec2 (-0.5, +1.5).xyxy;
-	
-	vec4 s = vec4(xcubic.xz + xcubic.yw, ycubic.xz + ycubic.yw);
-	vec4 offset = c + vec4 (xcubic.yw, ycubic.yw) / s;
-	
-	offset *= inv_tex_size.xxyy;
-	
-	vec4 sample0 = texture(sampler, offset.xz);
-	vec4 sample1 = texture(sampler, offset.yz);
-	vec4 sample2 = texture(sampler, offset.xw);
-	vec4 sample3 = texture(sampler, offset.yw);
-	
-	float sx = s.x / (s.x + s.y);
-	float sy = s.z / (s.z + s.w);
-	
-	return mix(mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
-}
+[sub_resource type="NoiseTexture" id=15]
+seamless = true
+as_normalmap = true
+noise = SubResource( 14 )
 
-render_mode blend_mix,depth_draw_opaque,cull_back,diffuse_burley,specular_schlick_ggx;
-uniform vec4 albedo : hint_color;
-uniform sampler2D texture_albedo : hint_albedo;
-uniform float specular;
-uniform float metallic;
-uniform float roughness : hint_range(0,1);
-uniform float point_size : hint_range(0,128);
-uniform vec3 uv1_scale;
-uniform vec3 uv1_offset;
-uniform vec3 uv2_scale;
-uniform vec3 uv2_offset;
+[sub_resource type="SpatialMaterial" id=16]
+metallic = 1.0
+roughness = 0.1
+normal_enabled = true
+normal_scale = 1.0
+normal_texture = SubResource( 15 )
+uv1_scale = Vector3( 0.2, 0.2, 1 )
+uv1_triplanar = true
 
+[sub_resource type="ProceduralSky" id=17]
 
-void vertex() {
-	UV=UV*uv1_scale.xy+uv1_offset.xy;
-}
-
-
-
-
-void fragment() {
-	vec2 base_uv = UV;
-	vec4 albedo_tex = texture(texture_albedo,base_uv);
-	ALBEDO = albedo.rgb * albedo_tex.rgb;
-	METALLIC = metallic;
-	ROUGHNESS = roughness;
-	SPECULAR = specular;
-//PR__FRAGMENT_CODE__PR//
-	vec3 reflectiveness = fresnel(mix(vec3(0.08), ALBEDO, METALLIC), dot(normalize(VERTEX), NORMAL));
-	
-	vec4 model_pos = inverse(WORLD_MATRIX) * CAMERA_MATRIX * vec4(VERTEX, 1.0);
-	vec2 uv = (vec2(model_pos.x, -model_pos.y) - viewport_rect.xy) / viewport_rect.zw;
-	vec4 reflection = texture_bicubic(viewport, uv);
-	if(any(isnan(reflection))) {
-		reflection = vec4(1.0);
-	}
-	reflectiveness *= pow(1.0 - ROUGHNESS, 4.0);
-	EMISSION = reflection.rgb * reflectiveness * reflection.a;
-	ALBEDO = mix(ALBEDO, vec3(0.0), reflection.a * reflectiveness);
-	ROUGHNESS = mix(ROUGHNESS, 1.0, pow(reflection.a, 4.0) * mix(reflectiveness.g, 1.0, METALLIC));
-	METALLIC = mix(METALLIC, 1.0, pow(reflection.a, 4.0) * mix(reflectiveness.g, 1.0, METALLIC));
-	}
-"
-
-[sub_resource type="ViewportTexture" id=14]
-flags = 4
-
-[sub_resource type="ShaderMaterial" id=15]
-shader = SubResource( 13 )
-shader_param/viewport_rect = Plane( -1.5, -2, 3, 4 )
-shader_param/albedo = Color( 1, 1, 1, 1 )
-shader_param/specular = 0.5
-shader_param/metallic = 1.0
-shader_param/roughness = 0.0
-shader_param/point_size = null
-shader_param/uv1_scale = Vector3( 3, 3, 0 )
-shader_param/uv1_offset = null
-shader_param/uv2_scale = null
-shader_param/uv2_offset = null
-shader_param/viewport = SubResource( 14 )
+[sub_resource type="Environment" id=18]
+background_mode = 2
+background_sky = SubResource( 17 )
+glow_enabled = true
 
 [node name="Spatial" type="Spatial"]
 
 [node name="Camera" type="Camera" parent="."]
 transform = Transform( 0.866025, 0, -0.5, 0, 1, 0, 0.5, 0, 0.866025, -2.7, 2.5, 2 )
+cull_mask = 1048571
 size = 0.1
 script = ExtResource( 3 )
 max_speed = Vector3( 6, 6, 6 )
@@ -214,55 +133,49 @@ __meta__ = {
 "_edit_lock_": true
 }
 
-[node name="Floor" type="MeshInstance" parent="Scene"]
-layers = 2
-mesh = SubResource( 4 )
-material/0 = SubResource( 5 )
-
 [node name="Wall" type="MeshInstance" parent="Scene"]
 transform = Transform( 1, 0, 0, 0, -1.62921e-07, -1, 0, 1, -1.62921e-07, 0, 0, -10 )
 mesh = SubResource( 4 )
-material/0 = SubResource( 6 )
+material/0 = SubResource( 5 )
 
 [node name="Skull" type="MeshInstance" parent="Scene"]
 transform = Transform( -1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, 0, 2.23164, 0 )
 mesh = ExtResource( 4 )
-material/0 = SubResource( 7 )
+material/0 = SubResource( 6 )
 
 [node name="Sphere" type="MeshInstance" parent="Scene"]
-transform = Transform( -1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, 1.5, 2.07203, -3.56913 )
-mesh = SubResource( 8 )
-material/0 = SubResource( 9 )
+transform = Transform( -1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, 9.99317, -2.27971, -3.56913 )
+layers = 2
+mesh = SubResource( 7 )
+material/0 = SubResource( 8 )
 
 [node name="Cube" type="MeshInstance" parent="Scene"]
-transform = Transform( -1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, -1.5, 1.5, 0 )
-mesh = SubResource( 10 )
-material/0 = SubResource( 11 )
+transform = Transform( -1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, -6.62608, 1.45155, 2.12634 )
+mesh = SubResource( 9 )
+material/0 = SubResource( 10 )
 
 [node name="OmniLight" type="OmniLight" parent="Scene"]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2.04976, 3.428, 0 )
+layers = 1048575
 omni_range = 16.1412
 
-[node name="PlanarReflector" type="MeshInstance" parent="."]
-transform = Transform( 1, 0, 0, 0, 0.998931, 0.0462352, 0, -0.0462352, 0.998931, 0.877481, 1.5336, -9.83284 )
-material_override = SubResource( 5 )
+[node name="MeshInstance" type="MeshInstance" parent="Scene/OmniLight"]
+layers = 4
+material_override = SubResource( 11 )
 mesh = SubResource( 12 )
 material/0 = null
+
+[node name="PlanarReflector" type="MeshInstance" parent="Scene"]
+transform = Transform( 1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0 )
+mesh = SubResource( 13 )
+material/0 = SubResource( 16 )
 script = ExtResource( 7 )
-resolution = 256
+resolution = 512
 fit_mode = 0
-roughness = 0.01
-transparent = false
+perturb_scale = 0.7
+clip_bias = 0.1
+render_sky = true
 cull_mask = 1048575
 
-[node name="MeshInstance" type="MeshInstance" parent="PlanarReflector"]
-material_override = SubResource( 15 )
-mesh = SubResource( 12 )
-material/0 = null
-
-[node name="reflect_vp" type="Viewport" parent="PlanarReflector"]
-size = Vector2( 192, 256 )
-transparent_bg = true
-msaa = 2
-keep_3d_linear = true
-shadow_atlas_size = 512
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource( 18 )

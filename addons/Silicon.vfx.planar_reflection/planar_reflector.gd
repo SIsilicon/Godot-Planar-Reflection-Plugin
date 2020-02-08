@@ -1,16 +1,28 @@
 tool
 extends MeshInstance
 
+const SHOW_NODES_IN_EDITOR = false
+
 enum FitMode {
-	FIT_AREA,
-	FIT_VIEW
+	FIT_AREA, # Fits reflection on the whole area
+	FIT_VIEW # Fits reflection in view.
 }
 
 # Exported variables
-var resolution := 256 setget set_resolution
-var fit_mode : int = FitMode.FIT_AREA setget set_fit_mode
-var roughness := 0.01 setget set_roughness
-var transparent := false setget set_transparent
+## The resolution of the reflection.
+var resolution := 512 setget set_resolution
+## How the reflection fits in the area.
+var fit_mode : int = FitMode.FIT_AREA
+## How much normal maps distort the reflection.
+var perturb_scale := 0.7
+## How much geometry beyond the plane will be rendered.
+## Can be used along with perturb scale to make sure there're no seams in the reflection. 
+var clip_bias := 0.1
+## Whether to render the sky in the reflection.
+## Disabling this allows you to mix planar reflection, with other sources of reflections,
+## such as reflection probes.
+var render_sky := true setget set_render_sky
+## What geometry gets rendered into the reflection.
 var cull_mask := 0xfffff setget set_cull_mask
 
 # Internal variables
@@ -20,119 +32,99 @@ var reflect_mesh : MeshInstance
 var reflect_viewport : Viewport
 var reflect_texture : ViewportTexture
 var reflect_material : Material
+var viewport_rect := Rect2(0, 0, 1, 1)
 
 var main_cam : Camera
 var reflect_camera : Camera
 
 func _set(property : String, value) -> bool:
 	match property:
-		"resolution":
-			set_resolution(value)
-		"fit_mode":
-			set_fit_mode(value)
-		"roughness":
-			set_roughness(value)
-		"transparent":
-			set_transparent(value)
-		"cull_mask":
-			set_cull_mask(value)
 		"mesh":
-			mesh = value
-			reflect_mesh.mesh = mesh
+			set_mesh(value)
 		"material_override":
-			if material_override and material_override != value:
-				ReflectMaterialManager.remove_material(material_override, self)
-			
-			material_override = value
-			VisualServer.instance_geometry_set_material_override(get_instance(), preload("discard.material").get_rid())
-			reflect_mesh.material_override = ReflectMaterialManager.add_material(value, self)
-			reflect_mesh.material_override.set_shader_param("viewport", reflect_texture)
+			set_material_override(value)
+		"cast_shadow":
+			set_cast_shadow(value)
+		"layers":
+			set_layers(value)
 		_:
-			return false
+			if property.begins_with("material/"):
+				property.erase(0, "material/".length())
+				set_surface_material(int(property), value)
+			else:
+				return false
 	return true
-
-func _get(property : String):
-	match property:
-		"resolution":
-			return resolution
-		"fit_mode":
-			return fit_mode
-		"roughness":
-			return roughness
-		"transparent":
-			return transparent
-		"cull_mask":
-			return cull_mask
 
 func _get_property_list() -> Array:
 	var props := []
 	
+	props += [{"name": "PlanarReflector", "type": TYPE_NIL, "usage": PROPERTY_USAGE_CATEGORY}]
 	props += [{"name": "resolution", "type": TYPE_INT}]
 	props += [{"name": "fit_mode", "type": TYPE_INT, "hint": PROPERTY_HINT_ENUM, "hint_string": "Fit Area, Fit View"}]
-	props += [{"name": "roughness", "type": TYPE_REAL, "hint": PROPERTY_HINT_RANGE, "hint_string": "0, 1"}]
-	props += [{"name": "transparent", "type": TYPE_BOOL}]
+	props += [{"name": "perturb_scale", "type": TYPE_REAL}]
+	props += [{"name": "clip_bias", "type": TYPE_REAL, "hint": PROPERTY_HINT_RANGE, "hint_string": "0, 1, 0.01, or_greater"}]
+	props += [{"name": "render_sky", "type": TYPE_BOOL}]
 	props += [{"name": "cull_mask", "type": TYPE_INT, "hint": PROPERTY_HINT_LAYERS_3D_RENDER}]
 	
 	return props
 
 func _ready() -> void:
-	for i in get_children():
-		remove_child(i)
-	
 	if Engine.editor_hint:
 		plugin = get_node("/root/EditorNode/PlanarReflectionPlugin")
 	
+	if SHOW_NODES_IN_EDITOR:
+		for node in get_children():
+			node.queue_free()
+	
 	# Create mirror surface
 	reflect_mesh = MeshInstance.new()
+	reflect_mesh.layers = layers
+	reflect_mesh.cast_shadow = cast_shadow
 	reflect_mesh.mesh = mesh
 	add_child(reflect_mesh)
 	
 	if not mesh:
 		self.mesh = QuadMesh.new()
 	
-	#create mirror material
+	# Create mirror material
 	reflect_material = ShaderMaterial.new()
 	reflect_material.shader = preload("base_reflection.shader")
 	reflect_material.resource_local_to_scene = true
 	reflect_material.render_priority = -2
 	reflect_mesh.material_override = reflect_material
 	
-	# add viewport
+	# Create reflection viewport
 	reflect_viewport = Viewport.new()
-	reflect_viewport.transparent_bg = true
+	reflect_viewport.transparent_bg = not render_sky
 	reflect_viewport.keep_3d_linear = true
 	reflect_viewport.hdr = true
 	reflect_viewport.msaa = Viewport.MSAA_4X
 	reflect_viewport.shadow_atlas_size = 512
-	reflect_viewport.name = "reflect_vp"
 	add_child(reflect_viewport)
 	
 	yield(get_tree(), 'idle_frame')
 	yield(get_tree(), 'idle_frame')
 	
+	# Create reflection texture
 	reflect_texture = reflect_viewport.get_texture()
 	reflect_texture.set_flags(Texture.FLAG_FILTER)
-	reflect_material.set_shader_param("viewport", reflect_texture)
-	
 	if not Engine.is_editor_hint():
 		reflect_texture.viewport_path = "/root/" + get_node("/root").get_path_to(reflect_viewport)
 	
 	initialize_camera()
 	
-	set_resolution(resolution)
-	set_transparent(transparent)
-	set_roughness(roughness)
-	set_cull_mask(cull_mask)
+	self.material_override = material_override
+	for mat in get_surface_material_count():
+		set_surface_material(mat, get_surface_material(mat))
 	
-	self.set("material_override", material_override)
-	
-	for i in get_children():
-		i.owner = get_tree().edited_scene_root
+	if SHOW_NODES_IN_EDITOR:
+		for i in get_children():
+			i.owner = get_tree().edited_scene_root
 
 func _process(delta : float) -> void:
 	if not reflect_camera or not reflect_viewport or not get_extents().length():
 		return
-	resize_viewport()
+	update_viewport()
 	
 	# Get main camera and viewport
 	var main_viewport : Viewport
@@ -182,7 +174,7 @@ func _process(delta : float) -> void:
 	else:
 		# Area of the whole plane
 		rect = Rect2(-get_extents() / 2.0, get_extents())
-	reflect_mesh.material_override.set_shader_param("viewport_rect", Plane(rect.position.x, rect.position.y, rect.size.x, rect.size.y))
+	viewport_rect = rect
 	
 	var rect_center := rect.position + rect.size / 2.0
 	reflection_transform.origin += reflection_transform.basis.x * rect_center.x
@@ -214,9 +206,12 @@ func _process(delta : float) -> void:
 	#               be reflecting anything behind the mirror)
 	# - z_far	-> large arbitrary value (render distance limit form th mirror camera position)
 	var z_near := proj_pos.distance_to(cam_pos)
-	reflect_camera.set_frustum(rect.size.y, -offset, z_near, main_cam.far)
+	var clip_factor = (z_near - clip_bias) / z_near
+	if rect.size.y * clip_factor > 0:
+		reflect_camera.set_frustum(rect.size.y * clip_factor, -offset * clip_factor, z_near * clip_factor, main_cam.far)
 
-func resize_viewport() -> void:
+func update_viewport() -> void:
+	reflect_viewport.transparent_bg = not render_sky
 	var new_size : Vector2 = Vector2(get_extents().aspect(), 1.0) * resolution
 	if new_size.x > new_size.y:
 		new_size = new_size / new_size.x * resolution
@@ -229,12 +224,9 @@ func initialize_camera() -> void:
 	if !is_inside_tree():
 		return
 	
-	# Free mirror camera if it already exists
-	if reflect_camera != null:
-		reflect_camera.queue_free()
-	
 	# Add a mirror camera
 	reflect_camera = Camera.new()
+	reflect_camera.cull_mask = cull_mask
 	reflect_camera.name = "reflect_cam"
 	reflect_viewport.add_child(reflect_camera)
 	reflect_camera.keep_aspect = Camera.KEEP_HEIGHT
@@ -246,27 +238,7 @@ func get_extents() -> Vector2:
 	else:
 		return Vector2()
 
-func set_resolution(value : int) -> void:
-	resolution = max(value, 1)
-
-func set_fit_mode(value : int) -> void:
-	fit_mode = value
-
-func set_roughness(value : float) -> void:
-	roughness = value
-	if reflect_material:
-		reflect_material.set_shader_param("roughness", roughness)
-
-func set_transparent(value : bool) -> void:
-	transparent = value
-	if reflect_material:
-		reflect_material.set_shader_param("transparent", transparent)
-
-func set_cull_mask(value : int) -> void:
-	cull_mask = value
-	if reflect_camera:
-		reflect_camera.cull_mask = cull_mask
-
+# Scale rect2 relative to its center
 static func scale_rect2(rect : Rect2, scale : Vector2) -> Rect2:
 	var center = rect.position + rect.size / 2.0;
 	rect.position -= center
@@ -275,3 +247,47 @@ static func scale_rect2(rect : Rect2, scale : Vector2) -> Rect2:
 	rect.position += center
 	
 	return rect
+
+# Setters
+
+func set_resolution(value : int) -> void:
+	resolution = max(value, 1)
+
+func set_render_sky(value : bool) -> void:
+	render_sky = value
+	if reflect_viewport:
+		reflect_viewport.transparent_bg = not render_sky
+
+func set_cull_mask(value : int) -> void:
+	cull_mask = value
+	if reflect_camera:
+		reflect_camera.cull_mask = cull_mask
+
+func set_mesh(value : Mesh) -> void:
+	mesh = value
+	reflect_mesh.mesh = mesh
+
+func set_material_override(value : Material) -> void:
+	if material_override and material_override != value:
+		ReflectMaterialManager.remove_material(material_override, self)
+	
+	material_override = value
+	VisualServer.instance_geometry_set_material_override(get_instance(), preload("discard.material").get_rid())
+	reflect_mesh.material_override = ReflectMaterialManager.add_material(value, self)
+
+func set_surface_material(index : int, value : Material) -> void:
+	var material = get_surface_material(index)
+	
+	if material and material != value:
+		ReflectMaterialManager.remove_material(material, self)
+	
+	.set_surface_material(index, value)
+	reflect_mesh.set_surface_material(index, ReflectMaterialManager.add_material(value, self))
+
+func set_cast_shadow(value : int) -> void:
+	cast_shadow = value
+	reflect_mesh.cast_shadow = value
+
+func set_layers(value : int) -> void:
+	layers = value
+	reflect_mesh.layers = value
