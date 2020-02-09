@@ -11,6 +11,7 @@ If you're don't know what Planar Reflection is, then let me explain. Planar Refl
 ## Installation
 
 Whether you're downloading it from the GitHub repo, or from the Godot asset library, the plugin will be inside the `addons` folder. copy that folder into your project's `addons` folder. If you don't have such a folder, make one.
+Then in your Project Settings, go to the Plugins tab and enable the plugin. Simple!
 
 ## Usage
 
