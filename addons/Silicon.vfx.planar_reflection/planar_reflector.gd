@@ -24,6 +24,8 @@ var clip_bias := 0.1
 var render_sky := true setget set_render_sky
 ## What geometry gets rendered into the reflection.
 var cull_mask := 0xfffff setget set_cull_mask
+## Custom environment to render the reflection with.
+var environment : Environment setget set_environment
 
 # Internal variables
 var plugin : EditorPlugin
@@ -31,7 +33,6 @@ var plugin : EditorPlugin
 var reflect_mesh : MeshInstance
 var reflect_viewport : Viewport
 var reflect_texture : ViewportTexture
-var reflect_material : Material
 var viewport_rect := Rect2(0, 0, 1, 1)
 
 var main_cam : Camera
@@ -59,6 +60,7 @@ func _get_property_list() -> Array:
 	var props := []
 	
 	props += [{"name": "PlanarReflector", "type": TYPE_NIL, "usage": PROPERTY_USAGE_CATEGORY}]
+	props += [{"name": "environment", "type": TYPE_OBJECT, "hint": PROPERTY_HINT_RESOURCE_TYPE, "hint_string": "Environment"}]
 	props += [{"name": "resolution", "type": TYPE_INT}]
 	props += [{"name": "fit_mode", "type": TYPE_INT, "hint": PROPERTY_HINT_ENUM, "hint_string": "Fit Area, Fit View"}]
 	props += [{"name": "perturb_scale", "type": TYPE_REAL}]
@@ -86,13 +88,6 @@ func _ready() -> void:
 	if not mesh:
 		self.mesh = QuadMesh.new()
 	
-	# Create mirror material
-	reflect_material = ShaderMaterial.new()
-	reflect_material.shader = preload("base_reflection.shader")
-	reflect_material.resource_local_to_scene = true
-	reflect_material.render_priority = -2
-	reflect_mesh.material_override = reflect_material
-	
 	# Create reflection viewport
 	reflect_viewport = Viewport.new()
 	reflect_viewport.transparent_bg = not render_sky
@@ -102,6 +97,15 @@ func _ready() -> void:
 	reflect_viewport.shadow_atlas_size = 512
 	add_child(reflect_viewport)
 	
+	# Add a mirror camera
+	reflect_camera = Camera.new()
+	reflect_camera.cull_mask = cull_mask
+	reflect_camera.environment = environment
+	reflect_camera.name = "reflect_cam"
+	reflect_camera.keep_aspect = Camera.KEEP_HEIGHT
+	reflect_camera.current = true
+	reflect_viewport.add_child(reflect_camera)
+	
 	yield(get_tree(), 'idle_frame')
 	yield(get_tree(), 'idle_frame')
 	
@@ -110,8 +114,6 @@ func _ready() -> void:
 	reflect_texture.set_flags(Texture.FLAG_FILTER)
 	if not Engine.is_editor_hint():
 		reflect_texture.viewport_path = "/root/" + get_node("/root").get_path_to(reflect_viewport)
-	
-	initialize_camera()
 	
 	self.material_override = material_override
 	for mat in get_surface_material_count():
@@ -220,18 +222,6 @@ func update_viewport() -> void:
 	if new_size != reflect_viewport.size:
 		reflect_viewport.size = new_size
 
-func initialize_camera() -> void:
-	if !is_inside_tree():
-		return
-	
-	# Add a mirror camera
-	reflect_camera = Camera.new()
-	reflect_camera.cull_mask = cull_mask
-	reflect_camera.name = "reflect_cam"
-	reflect_viewport.add_child(reflect_camera)
-	reflect_camera.keep_aspect = Camera.KEEP_HEIGHT
-	reflect_camera.current = true
-
 func get_extents() -> Vector2:
 	if mesh:
 		return Vector2(mesh.get_aabb().size.x, mesh.get_aabb().size.y)
@@ -262,6 +252,11 @@ func set_cull_mask(value : int) -> void:
 	cull_mask = value
 	if reflect_camera:
 		reflect_camera.cull_mask = cull_mask
+
+func set_environment(value : Environment) -> void:
+	environment = value
+	if reflect_camera:
+		reflect_camera.environment = environment
 
 func set_mesh(value : Mesh) -> void:
 	mesh = value

@@ -74,6 +74,8 @@ void fragment() {
 	vec3 _pr_plane_origin = WORLD_MATRIX[3].xyz;
 	vec3 _pr_plane_normal = WORLD_MATRIX[2].xyz;
 	vec3 _pr_final_normal = _pr_normal_from_normalmap(NORMALMAP, NORMAL, TANGENT, BINORMAL, NORMALMAP_DEPTH);
+	if(!FRONT_FACING)
+		_pr_final_normal *= -1.0;
 	
 	vec4 _pr_point_on_plane = CAMERA_MATRIX * vec4(VERTEX, 1.0);
 	_pr_point_on_plane.xyz += reflect(mat3(CAMERA_MATRIX) * reflect(-VIEW, _pr_final_normal) * _pr_perturb_scale, _pr_plane_normal);
