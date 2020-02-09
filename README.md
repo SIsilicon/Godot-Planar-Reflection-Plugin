@@ -1,18 +1,24 @@
 # Godot-Planar-Reflection-Plugin
 
-Greetings! This plugin, as the name implies adds planar reflection to the Godot game engine. 3.2 to be more specific. The effect comes in the form of a node called `PlanarReflector`. Add any smooth material to it, and watch as objects in the scene are faithfully reflected on it.
+Greetings! This plugin, as the name implies adds planar reflection to the Godot game engine. 3.2 to be more specific. I made this plugin to make it easier for others to have good looking reflections for their 3D games. Watch as objects in the scene are faithfully reflected in the planar reflectors. I hope you find this useful. :)
+
+## What is this?
+If you're don't know what Planar Reflection is, then let me explain. Planar Reflection is a technique used in real time graphics engines to render a reflection on a planar surface. "Planar" includes anything that's at least close to flat; like a floor, a mirror or a calm body of water. How it does it is that it renders the scene a second time from a different perspective. This second render is then projected onto the plane that'll have the reflection.
+
+![How_it_works](pictures/How_it_works.png) The advantage of using this over something like Screen Space Reflection is that it does not rely on what's on screen. No matter what angle you look at it, everything will show in the reflection.
+![Screen_Space_vs_Planar](pictures/Screen_Space_vs_Planar.png)Of course, because it renders the scene another time, having a lot of these is probably not a good idea; use them wisely and sparingly.
 
 ## Installation
 
-Whether you're downloading it from the github repo, or from the Godot asset library, the plugin will be inside the `addons` folder. copy that folder into your project's `addons` folder. If you don't have such a folder, make one.
+Whether you're downloading it from the GitHub repo, or from the Godot asset library, the plugin will be inside the `addons` folder. copy that folder into your project's `addons` folder. If you don't have such a folder, make one.
 
 ## Usage
 
-As stated before, the plugin adds a new node called `PlanarReflector`. All you need to get reflections set up is
+As stated before, the plugin adds a new node called `PlanarReflector`. All you need to do to get reflections set up is
 
 1. Add a `PlanarReflector` to the scene.
 2. Add a material. Preferably a `SpatialMaterial`.
-3. Adjust the default geometry as needed.
+3. Adjust the default geometry as needed (set its size; **not its scale**).
 
 At first you won't see a reflection, but that's because the default material has a high roughness parameter.
 
@@ -34,7 +40,7 @@ It also works with `ShaderMaterials`. Which means you can finally have that beau
 
 ![Shader Material](pictures/Shader_Material.png)
 
-What's also great is that the reflections can be previewed directly in the editor, as the pictures above show. Sure the reflection lags behind when you move it, but it's better than nothing. ;)
+What's also great is that the reflections can be previewed directly in the editor, as the pictures above show. Sure the reflection lags behind when you move the camera around, but it's better than nothing. ;)
 
 ### Parameters
 
@@ -60,8 +66,8 @@ The `PlanarReflector` has the following parameters available.
 * Materials stored directly in the reflector's mesh will have no effect.
 * Specular highlights, from point lights and such, don't appear in metallic reflections. This can be worked around by disabling `Render Sky`. The highlight will appear where there is no geometry.
 
-## Special thanks
+## Special Thanks
 
-This project wouldn't have been possible without inspiration from JFons' [Godot Mirror Example](https://github.com/JFonS/godot-mirror-example). His code is the core of the planar reflector's script. :)
+This project wouldn't have been possible without JFons' [Godot Mirror Example](https://github.com/JFonS/godot-mirror-example). His code is the core of the planar reflector's script. :)
 
 Also the code for camera movement in the demo is by [Maujoe](https://github.com/Maujoe/godot-camera-control).
