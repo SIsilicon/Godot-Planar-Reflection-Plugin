@@ -16,23 +16,23 @@ As stated before, the plugin adds a new node called `PlanarReflector`. All you n
 
 At first you won't see a reflection, but that's because the default material has a high roughness parameter.
 
-![Default material](pictures/Default material.png)
+![Default material](pictures/Default_Material.png)
 
 If you turn the roughness down however,
 
-![Smooth Material](pictures/Smooth Material.png)
+![Smooth Material](pictures/Smooth_Material.png)
 
 Voila! You've got a reflection. Setting the Metallic all the way up will give you a mirror. Cool huh?
 
-![Metallic Material](pictures/Metallic Material.png)
+![Metallic Material](pictures/Metallic_Material.png)
 
 The `PlanarReflector` works with most of the `SpatialMaterial` settings. It can even work with normal maps.
 
-![Normal Mapped Material](pictures/Normal Mapped Material.png)
+![Normal Mapped Material](pictures/Normal_Mapped_Material.png)
 
 It also works with `ShaderMaterials`. Which means you can finally have that beautiful reflection in your pond. :)
 
-![Shader Material](pictures/Shader Material.png)
+![Shader Material](pictures/Shader_Material.png)
 
 What's also great is that the reflections can be previewed directly in the editor, as the pictures above show. Sure the reflection lags behind when you move it, but it's better than nothing. ;)
 
