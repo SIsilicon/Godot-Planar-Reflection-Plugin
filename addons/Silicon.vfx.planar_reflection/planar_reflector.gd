@@ -28,7 +28,7 @@ var cull_mask := 0xfffff setget set_cull_mask
 var environment : Environment setget set_environment
 
 # Internal variables
-var plugin : EditorPlugin
+var plugin
 
 var reflect_mesh : MeshInstance
 var reflect_viewport : Viewport

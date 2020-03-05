@@ -136,6 +136,11 @@ func update_reflector(index : int, planar, material : Material, variables := [])
 	))
 	reflector.set_shader_param("_pr_viewport", planar.reflect_texture)
 	reflector.set_shader_param("_pr_perturb_scale", planar.perturb_scale)
+	
+	if OS.get_current_video_driver() == OS.VIDEO_DRIVER_GLES2:
+		reflector.set_shader_param("_pr_viewport_size", PoolIntArray([
+				planar.reflect_texture.get_width(), planar.reflect_texture.get_height()
+		]))
 
 # Returns an array of [shader name, property of material]
 func read_material_properties(material : Material) -> Array:
@@ -197,7 +202,12 @@ func read_material_properties(material : Material) -> Array:
 	return list
 
 static func convert_material(material : Material) -> Shader:
-	var base := preload("base_reflection.shader").code
+	var base : String 
+	if OS.get_current_video_driver() == OS.VIDEO_DRIVER_GLES2:
+		base = preload("base_reflection_gles2.shader").code
+	else:
+		base = preload("base_reflection.shader").code
+	
 	var code := VisualServer.shader_get_code(
 			VisualServer.material_get_shader(material.get_rid())
 	)
